@@ -55,14 +55,17 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cam);
 //Line
 void drawCenterScreen(Mat);
 
+Mat thresh_callback(Mat);
+
 int main (int argc, char* argv[]) {
 
 	//Creating windows
-	Mat cam, hsl, hsv, thresholdHSL, thresholdHSV;
+	Mat cam, hsl, hsv, thresholdHSL, thresholdHSV, drawing;
 
 	namedWindow(OG_IMAGE, WINDOW_AUTOSIZE);
 	namedWindow(HSL_IMAGE, WINDOW_AUTOSIZE);
 	namedWindow(THRESHOLD_HSL, WINDOW_AUTOSIZE);
+	namedWindow("Contours", WINDOW_AUTOSIZE);
 
 	if(bothDisplays) {
 	namedWindow(THRESHOLD_HSV, WINDOW_AUTOSIZE);
@@ -123,6 +126,8 @@ int main (int argc, char* argv[]) {
 		imshow(OG_IMAGE, cam);
 		imshow(HSL_IMAGE, hsl);
 
+		imshow("Contours", thresh_callback(thresholdHSL));
+
 		if(bothDisplays)
 		imshow(HSV_IMAGE, hsv);
 
@@ -135,6 +140,13 @@ int main (int argc, char* argv[]) {
 	}
 
 	return 0;
+}
+
+string toString(int num) {
+
+    std::ostringstream ss;
+    ss << num;
+    return ss.str();
 }
 
 void drawCenterScreen(Mat cam) {
@@ -174,7 +186,7 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cam) {
 	if(hierarchy.size() > 0) {
 		int numObject = hierarchy.size();
 
-		if(numObject<100) {
+		if(numObject<300) {
 			for(int i = 0; i >= 0; i = hierarchy[i][0]){
 
 				Moments moment = moments((cv::Mat)contours[i]);
@@ -183,22 +195,36 @@ void trackFilteredObject(int &x, int &y, Mat threshold, Mat &cam) {
 				if(area>1000 && area < 150000) {
 //More about moments
 // http://docs.opencv.org/2.4/modules/imgproc/doc/structural_analysis_and_shape_descriptors.html?highlight=moments#moments
-					x = moment.m10/area;
-					circle(cam, Point(moment.m10, moment.m01), 20, Scalar(0,255,0), 2);
 
+					x = moment.m10/area;
 					y = moment.m01/area;
 					objectFound = true;
 					refArea = area;
+
+					putText(cam, toString(area), Point(0,50),2,1,Scalar(0,225,0),2);
+/* failure
+					int arLen = arcLength(contours, true);
+					putText(cam, toString(arLen), Point(0,250),2,1,Scalar(0,225,0),2);
+*/
+//					RotatedRect rect = minAreaRect(contours);
+//					boxPoints(rect, cam);
+				//	drawContours(cam, )
+/*second fail		vector<RotatedRect> minRect(contours.size());
+
+					  for( int i = 0; i< contours.size(); i++ ) {
+				    Point2f rect_points[4]; minRect[i].points( rect_points );
+				       for( int j = 0; j < 4; j++ )
+				          line(cam, rect_points[j], rect_points[(j+1)%4], Scalar(200,255,9), 4, 8 );
+					  }
+*/
+
+
 				} else  {
 					objectFound = false;
 				}
 				if (objectFound) {
-
-				    std::ostringstream ss;
-				    ss << area;
 				    drawObject(x,y,cam);
-				 	drawContours(cam, contours, -1, Scalar(0,255,0), 3);
-					putText(cam, ss.str(), Point(0,50),2,1,Scalar(0,225,0),2);
+			//	 	drawContours(cam, contours, -1, Scalar(0,255,0), 3);
 				} else {
 	//				putText(cam, "No Target Lock", Point(0,50),2,1,Scalar(0,225,0),2);
 				}
@@ -261,6 +287,41 @@ void lowVSlider4HSV(int, void*) {
 void highVSlider4HSV(int, void*) {
 	lMax4HSV = max(lMax4HSV, lMin4HSV+1);
 	setTrackbarPos("V Max", THRESHOLD_HSV, lMax4HSV);
+}
+
+Mat thresh_callback(Mat thresh)
+{
+	Mat temp;
+	thresh.copyTo(temp);
+  vector<vector<Point> > contours;
+  vector<Vec4i> hierarchy;
+
+  /// Detect edges using Threshold
+
+  /// Find contours
+  findContours( temp, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+
+  /// Find the rotated rectangles and ellipses for each contour
+  vector<RotatedRect> minRect( contours.size() );
+  vector<RotatedRect> minEllipse( contours.size() );
+
+  for( int i = 0; i < contours.size(); i++ )
+     { minRect[i] = minAreaRect( Mat(contours[i]) );
+       if( contours[i].size() > 5 )
+         { minEllipse[i] = fitEllipse( Mat(contours[i]) ); }
+     }
+
+  /// Draw contours + rotated rects + ellipses
+  Mat drawing = Mat::zeros( temp.size(), CV_8UC3 );
+  for( int i = 0; i< contours.size(); i++ )
+     {   // contour
+       drawContours( drawing, contours, i, Scalar(255, 255, 255), 1, 8, vector<Vec4i>(), 0, Point() );
+       // rotated rectangle
+       Point2f rect_points[4]; minRect[i].points( rect_points );
+       for( int j = 0; j < 4; j++ )
+          line( drawing, rect_points[j], rect_points[(j+1)%4], Scalar(255, 255, 255), 1, 8 );
+     }
+  return drawing;
 }
 
 //Blur value
